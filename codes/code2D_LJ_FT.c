@@ -15,17 +15,20 @@
 #define sigma 1
 #define dz 0.01
 #define dx 0.01
-#define Lx 50
-#define Lz 50
 #define mu 0.6045291013
-#define rhob 1.0
+#define rhob 0.304665
 
 #define rc 2.5
 
 
-#define Nx ((int)(Lx/dx))//vertical direction
+
+#define Lx 20.0
+#define Lz 20.0
+
+#define Nx ((int)(Lx/dx))
 #define Nz ((int)(Lz/dz))
-#define K (Nx/2+1)//Nx/2+1 
+
+#define K (Nz/2+1)//Nx/2+1 
 #define NiR (R/dz)
 #define NiLJ ((int)(rc/dx))//rc/dz
 #define R2 R*R
@@ -56,22 +59,22 @@ double dphidn0[Nx*Nz],dphidn1[Nx*Nz],dphidn2[Nx*Nz],dphidn3[Nx*Nz],dphidn1vx[Nx*
 double c1[Nx*Nz];
 double c1_temp[Nx*Nz];
 
-double omega3[Nx*Nz];
-double omega2[Nx*Nz];
-double omega1vx[Nx*Nz];
-double omega1vz[Nx*Nz];
+fftw_complex  omega3[Nx*K];
+fftw_complex  omega2[Nx*K];
+fftw_complex  omega1[Nx*K];
+fftw_complex  omega0[Nx*K];
 //double U[Nx][Nz];
 
-double omega0[Nx*Nz];
-double omega1[Nx*Nz];
-double omega2vx[Nx*Nz];
-double omega2vz[Nx*Nz];
+fftw_complex omega1vx[Nx*Nz];
+fftw_complex omega1vz[Nx*Nz];
+
+fftw_complex omega2vx[Nx*Nz];
+fftw_complex omega2vz[Nx*Nz];
 
 double dist(int,int,int,int);
 
 void getn(), getc1_fmt(),getc1_LJ(),filterc1(), getVext(), rhoinit(), iterate();
-void getomega3(),getomega2(),getomega1(),getomega0(),getomega1vx(),getomega1vz(),
-getomega2vx(),getomega2vz(),rhocpy(),filterrho(),write_rho(double,int);
+void getomega3(),getomega2(),getomega1(),getomega0(),getomega1v(),getomega2v(),rhocpy(),filterrho(),write_rho(double,int),conv_FFT2D_2(double*,fftw_complex *,double*);
 
 double aux_J5(double, double);
 double aux_J11(double, double);
@@ -202,118 +205,122 @@ void getUfilter()
 
 void getomega3()
 {
-	for(int i=0;i<Nx;i++)
-	{
-		for(int j=0;j<Nz;j++)
-		{
-			double d2 = dist(i, j, 0, 0);     // squared radius
-			
-			if(d2>=R2)
-			omega3[i*Nz + j]=0.0;
+	double kx=0.0,kz=0.0;
+  double dkx=2.*PI/Lx,dkz=2.*PI/Lz;
+  double k;
+  for(int i=0;i<Nx;i++)
+  {
+  	if(i<=Nx/2)
+  		kx=dkx*i;
+  	else
+  		kx=-dkx*(Nx-i);
+  	for(int j=0;j<K;j++)
+  	{
+  		kz=dkz*j;
+			k=sqrt(kx*kx+kz*kz);
+			if(i==0 && j==0)
+			{
+				omega3[i*K+j][0]=4.*PI*R*R*R/3;
+				omega3[i*K+j][1]=0.0;
+			}
 			else
-      omega3[i*Nz + j] = 2.*sqrt(R2-d2);
-		}
-	}
+			{
+				omega3[i*K+j][0]=8./3*PI*R*R*(j1(R*k)/(k));
+				omega3[i*K+j][1]=0.0;
+  		}
+  	}
+  }
+	
 }
 
 void getomega2()
 {
-	for(int i=0;i<Nx;i++)
-	{
-		for(int j=0;j<Nz;j++)
-		{
-			double d2=dist(i,j,0,0);
-			if(d2>=R2)
-			omega2[i*Nz + j]=0.0;
+  double kx=0.0,kz=0.0;
+  double dkx=2.*PI/Lx,dkz=2.*PI/Lz;
+  double k;
+  for(int i=0;i<Nx;i++)
+  {
+  	if(i<=Nx/2)
+  		kx=dkx*i;
+  	else
+  		kx=-dkx*(Nx-i);
+  	for(int j=0;j<K;j++)
+  	{
+  		kz=dkz*j;
+			k=sqrt(kx*kx+kz*kz);
+			if(i==0 && j==0)
+			{
+				omega2[i*K+j][0]=4.*PI*R*R;
+				omega2[i*K+j][1]=0.0;
+			}
 			else
 			{
-      	omega2[i*Nz + j] = 2.*R/sqrt(R2-d2);// * (PI/2.985884);
-      	omega2[i*Nz + j]=(omega2[i*Nz + j]>100.)? 0.0:omega2[i*Nz + j];
-			}
-		}
-	}
+				omega2[i*K+j][0]=8.*PI*R*R*(j1(R*k)/(R*k));
+				omega2[i*K+j][1]=0.0;
+  		}
+  	}
+  }
 }
 
 void getomega1()
 {
 		for(int i=0;i<Nx;i++)
-		for(int j=0;j<Nz;j++)
-		omega1[i*Nz+j]=omega2[i*Nz+j]*(1./4./PI/R);
-	
+		for(int j=0;j<K;j++)
+		{
+		omega1[i*K+j][0]=omega2[i*Nz+j][0]*(1./4./PI/R);
+		omega1[i*K+j][1]=omega2[i*Nz+j][1]*(1./4./PI/R);
+		}
 }
 void getomega0()
 {
 		for(int i=0;i<Nx;i++)
-		for(int j=0;j<Nz;j++)
-		omega0[i*Nz+j]=omega2[i*Nz+j]*(1./4./PI/R/R);
+		for(int j=0;j<K;j++)
+		{
+		omega0[i*K+j][0]=omega2[i*Nz+j][0]*(1./4./PI/R/R);
+		omega0[i*K+j][1]=omega2[i*Nz+j][1]*(1./4./PI/R/R);
+		}
 }
 
-int getDx(int i)
+void getomega2v()
 {
-	if(i<NiR)
-		return i;
-	return i-Nx;
-}
-
-int getDz(int i)
-{
-	if(i<NiR)
-		return i;
-	return i-Nz;
-}
-
-void getomega1vx()
-{
+	double kx=0.0,kz=0.0;
+	double dkx=2.*PI/Lx,dkz=2.*PI/Lz;
+	double k;
 	for(int i=0;i<Nx;i++)
 	{
-		for(int j=0;j<Nz;j++)
-		{
-			double d2=dist(i,j,0,0);
-			double Dx=dx*getDx(i);
-			if(d2>=R2)
-			omega1vx[i*Nz+j]=0.0;
-			else
-			{
-				omega1vx[i*Nz+j]=Dx/2./PI/R/sqrt(R2-d2);
-				omega1vx[i*Nz+j]=(fabs(omega1vx[i*Nz+j])>500)?0.:omega1vx[i*Nz+j];
-			}
+		if(i<=Nx/2)
+  		kx=dkx*i;
+  	else
+  		kx=-dkx*(Nx-i);
+  	for(int j=0;j<K;j++)
+  	{
+  		kz=dkz*j;
+			k=sqrt(kx*kx+kz*kz);
+		
+			omega2vx[i*K+j][1]=-kx*omega3[i*K+j][0];
+			omega2vx[i*K+j][0]=0.0;
+			omega2vz[i*K+j][1]=-kz*omega3[i*K+j][0];
+			omega2vz[i*K+j][0]=0.0;	
 		}
+	
 	}
 }
 
 
-void getomega1vz()
+void getomega1v()
 {
 	for(int i=0;i<Nx;i++)
+	for(int j=0;j<K;j++)
 	{
-		for(int j=0;j<Nz;j++)
-		{
-			double d2=dist(i,j,0,0);
-			double Dz=dz*getDz(j);
-			if(d2>=R2)
-			omega1vz[i*Nz+j]=0.0;
-			else
-			{
-				omega1vz[i*Nz+j]=Dz/2./PI/R/sqrt(R2-d2);
-				omega1vz[i*Nz+j]=(fabs(omega1vz[i*Nz+j])>500)?0.:omega1vz[i*Nz+j];
-			}
-		}
+		omega1vx[i*K+j][0]=omega2vx[i*K+j][0]/(4.*PI*R);
+		omega1vx[i*K+j][1]=omega2vx[i*K+j][1]/(4.*PI*R);
+		
+		omega1vz[i*K+j][0]=omega2vz[i*Nz+j][0]/(4.*PI*R);
+		omega1vz[i*K+j][1]=omega2vz[i*Nz+j][1]/(4.*PI*R);
+		
 	}
 }
 
-void getomega2vx()
-{
-		for(int i=0;i<Nx;i++)
-		for(int j=0;j<Nz;j++)
-		omega2vx[i*Nz+j]=omega1vx[i*Nz+j]*(4*PI*R);
-}
-
-void getomega2vz()
-{
-		for(int i=0;i<Nx;i++)
-		for(int j=0;j<Nz;j++)
-		omega2vz[i*Nz+j]=omega1vz[i*Nz+j]*(4*PI*R);
-}
 
 
 void rhoinit()
@@ -349,14 +356,14 @@ void getn()
 				n2vz[i1*Nz+j1]=0;
 			}
 	
-	conv_FFT2D(rhocopy, omega0, n0);
-	conv_FFT2D(rhocopy, omega1, n1);
-	conv_FFT2D(rhocopy, omega2, n2);
-	conv_FFT2D(rhocopy, omega3, n3);
-	conv_FFT2D(rhocopy, omega1vx, n1vx);
-	conv_FFT2D(rhocopy, omega1vz, n1vz);
-	conv_FFT2D(rhocopy, omega2vx, n2vx);
-	conv_FFT2D(rhocopy, omega2vz, n2vz);
+	conv_FFT2D_2(rhocopy, omega0, n0);
+	conv_FFT2D_2(rhocopy, omega1, n1);
+	conv_FFT2D_2(rhocopy, omega2,n2);
+	conv_FFT2D_2(rhocopy, omega3, n3);
+	conv_FFT2D_2(rhocopy, omega1vx, n1vx);
+	conv_FFT2D_2(rhocopy, omega1vz, n1vz);
+	conv_FFT2D_2(rhocopy, omega2vx, n2vx);
+	conv_FFT2D_2(rhocopy, omega2vz, n2vz);
 	
 }
 
@@ -401,6 +408,40 @@ void conv_FFT2D(double *f, double *g, double *h2)
   fftw_free(fft_h);
 }
 
+void conv_FFT2D_2(double *f, fftw_complex *fft_g,double *h2)
+{
+	fftw_complex *fft_f=fftw_alloc_complex((size_t)Nx * K);
+	fftw_complex *fft_h=fftw_alloc_complex((size_t)Nx * K);
+	
+	
+	fftw_plan ff = fftw_plan_dft_r2c_2d(Nx,Nz, f, fft_f, FFTW_ESTIMATE);
+  fftw_execute(ff);
+	
+  
+  
+  for (int i = 0; i < Nx * K; ++i) {
+        double a = fft_f[i][0], b = fft_f[i][1];
+        double c = fft_g[i][0], d = fft_g[i][1]; // d==0
+        fft_h[i][0] = a*c - b*d;
+        fft_h[i][1] = a*d + b*c;
+    }
+  
+  
+	fftw_plan fh= fftw_plan_dft_c2r_2d(Nx,Nz,fft_h,h2,FFTW_ESTIMATE);
+	fftw_execute(fh);
+	
+	
+	fftw_destroy_plan(ff);
+	fftw_destroy_plan(fh);
+	
+	
+	for(int i=0;i<Nx*Nz;i++)
+	h2[i]=(h2[i]/N);
+	
+	fftw_free(fft_f);
+  fftw_free(fft_h);
+}
+
 
 void add_c(double *c1, double *c1_temp)
 {
@@ -434,21 +475,21 @@ void getc1_fmt()
 				//c1_temp[i*Nz+j1]=0;
 			}
 	
-	conv_FFT2D(dphidn0, omega0, c1_temp);
+	conv_FFT2D_2(dphidn0, omega0, c1_temp);
 	add_c(c1,c1_temp);
-	conv_FFT2D(dphidn1, omega1, c1_temp);
+	conv_FFT2D_2(dphidn1, omega1, c1_temp);
 	add_c(c1,c1_temp);
-	conv_FFT2D(dphidn2, omega2, c1_temp);
+	conv_FFT2D_2(dphidn2, omega2, c1_temp);
 	add_c(c1,c1_temp);
-	conv_FFT2D(dphidn3, omega3, c1_temp);
+	conv_FFT2D_2(dphidn3, omega3, c1_temp);
 	add_c(c1,c1_temp);
-	conv_FFT2D(dphidn1vx, omega1vx, c1_temp);
+	conv_FFT2D_2(dphidn1vx, omega1vx, c1_temp);
 	add_c(c1,c1_temp);
-	conv_FFT2D(dphidn1vz, omega1vz, c1_temp);
+	conv_FFT2D_2(dphidn1vz, omega1vz, c1_temp);
 	add_c(c1,c1_temp);
-	conv_FFT2D(dphidn2vx, omega2vx, c1_temp);
+	conv_FFT2D_2(dphidn2vx, omega2vx, c1_temp);
 	add_c(c1,c1_temp);
-	conv_FFT2D(dphidn2vz, omega2vz, c1_temp);
+	conv_FFT2D_2(dphidn2vz, omega2vz, c1_temp);
 	add_c(c1,c1_temp);
 	
 				
@@ -489,7 +530,7 @@ void rhocpy()
 void filterrho()
 {
 	for(int i=0;i<Nx;i++)
-		for(int j=Nz-3*NiLJ;j<Nz;j++)
+		for(int j=Nz-4*NiR;j<Nz;j++)
 			rho[i*Nz+j]=rhob;
 }
 
@@ -501,8 +542,8 @@ void iterate(){
 	//getc1_LJ();
 	//filterc1(NiLJ);
 
-	double muex=-c1[(Nx/2 * Nz ) + (Nz/2)];//mu-log(rhob);
-	
+	double muex=mu-log(rhob);//-c1[(Nx/2 * Nz ) + (Nz/2)];//mu-log(rhob);
+	//printf("%f\n",muex);
 	/*
 	for(int i=0;i<N;i++)
 	c1[i]=c1[i]/(muex)*(-3.2872526167196);
@@ -557,7 +598,7 @@ void write_rho(double elapsed,int count_iter)
 void main(int argc,char *argv[])
 {
 	
-	ew=atof(argv[1]);
+	ew=0.0;//atof(argv[1]);
 	
 	clock_t start = clock();clock_t end;
 	double elapsed;
@@ -570,12 +611,10 @@ void main(int argc,char *argv[])
 	
 	getomega1();
 	getomega0();
-	getomega1vx();
-	getomega1vz();
-	getomega2vx();
-	getomega2vz();
+	getomega2v();
+	getomega1v();
 	
-	iterate();	
+	//iterate();	
 	
 	
 	for(int i=1;i<=INT_MAX;++i)
@@ -591,7 +630,7 @@ void main(int argc,char *argv[])
 	/*
 	int i=(Nx/2);
 	int j=(Nz/2);
-	printf("%d %d %f %f %f %f \n",i,j,n0[i*Nz+j],n1[i*Nz+j],n2[i*Nz+j],n3[i*Nz+j]);
+	printf("%d %d %f(1.0) %f(0.5) %f(3.14) %f(0.5236) %f(0) %f(0) \n",i,j,n0[i*Nz+j],n1[i*Nz+j],n2[i*Nz+j],n3[i*Nz+j],n2vx[i*Nz+j],n2vz[i*Nz+j]);
 	*/
 	
 	/*
