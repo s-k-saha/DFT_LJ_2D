@@ -345,9 +345,11 @@ void rhoinit()
 			rho[i*Nz+j]=rhol;
 	
 	Nrho=0;
-	for(int i=0;i<N;i++)
-	Nrho+=rho[i];
-	Nrho=((int)(Nrho*dx*dz));
+	for(int i=0;i<Nx;i++)
+	for(int j=NiR;j<Nz;j++)
+		Nrho+=(rho[i*Nz+j]-rhob);
+	Nrho=((int)((Nrho*dx*dz)/Lx));
+
 	printf("N: %f\n",Nrho);
 	/*
 	for(int i=0;i<Nx;i++)
@@ -644,12 +646,14 @@ void iterate(){
 	filterrho();
 	
 	double Nrhotemp=0.0;
-	for(int i=0;i<N;i++)
-	Nrhotemp+=rho[i];
-	Nrhotemp=((int)(Nrhotemp*dx*dz));
+	for(int i=0;i<Nx;i++)
+	for(int j=NiR;j<Nz;j++)
+		Nrhotemp+=(rho[i*Nz+j]-rhob);
+	Nrhotemp=((int)((Nrhotemp*dx*dz)/Lx));
 	
-	for(int i=0;i<N;i++)
-	rho[i]=rho[i]*(Nrho/Nrhotemp);
+	for(int i=0;i<Nx;i++)
+	for(int j=NiR;j<Nz;j++)
+		rho[i*Nz+j]=(rho[i*Nz+j]-rhob)*(Nrho/Nrhotemp)+rhob;
 	
 	
 	/*
@@ -665,7 +669,7 @@ void iterate(){
 void write_rho(double elapsed,int count_iter)
 {
 	char fname[100];
-	sprintf(fname,"../data/rho2Deps%few%fdx%frhob%f.dat",eps,ew,dx,rhob);
+	sprintf(fname,"../data/newrho2Deps%few%fdx%frhob%f.dat",eps,ew,dx,rhob);
 	FILE *F=fopen(fname,"w");
 	for(int i=0;i<Nx;i++)
 	{
@@ -676,7 +680,7 @@ void write_rho(double elapsed,int count_iter)
 	fprintf(F,"------------------\n20 x %d cycles time: %f s\n",count_iter,elapsed);
 	fclose(F);
 	
-	sprintf(fname,"../data/rho1Deps%few%fdx%frhob%f.dat",eps,ew,dx,rhob);
+	sprintf(fname,"../data/newrho1Deps%few%fdx%frhob%f.dat",eps,ew,dx,rhob);
 	F=fopen(fname,"w");
 	
 	for(int j=0;j<Nz;j++)
